@@ -53,7 +53,7 @@ app.post("/qrcode", (req, res) => {
   // Generate QR code using QR.io API
   const qrCodeUrl = "https://api.qr.io/v1/create";
   const requestBody = {
-    apikey: config.QRCODE_API_KEY,
+    apikey: config.QRCODE_API_KEY, //this key requires an upgrade on qr.io to get hence it's missing here
     data,
     transparent: "on",
     frontcolor: "#000000",
