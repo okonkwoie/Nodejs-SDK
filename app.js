@@ -2,6 +2,7 @@ const express = require("express");
 const config = require("./config/config");
 const bodyParser = require("body-parser");
 const rateLimit = require('express-rate-limit')
+const fs = require('fs');
 const helmet = require('helmet')
 const cloudinary = require("cloudinary").v2;
 const app = express();
@@ -12,11 +13,10 @@ app.use(bodyParser.json());
 
 // cloudinary configuration
 cloudinary.config({
-  cloud_name: config.CLOUDINARY_CLOUD_NAME,
-  api_key: config.CLOUDINARY_API_KEY,
-  api_secret: config.CLOUDINARY_API_SECRET,
-  secure: true
-});
+  cloud_name: config.CLOUD_NAME,
+  api_key: config.API_KEY,
+  api_secret: config.API_SECRET
+})
 
 // rate limiter
 const limiter = rateLimit({
@@ -30,7 +30,6 @@ app.use(limiter)
 
 // security middleware
 app.use(helmet())
-
 
 
 // endpoint to generate and upload QR code
@@ -50,73 +49,27 @@ app.post("/qrcode", (req, res) => {
     return res.status(400).json({ message: "Missing file extension" });
   }
 
-  // Generate QR code using QR.io API
-  const qrCodeUrl = "https://api.qr.io/v1/create";
-  const requestBody = {
-    apikey: config.QRCODE_API_KEY, //this key requires an upgrade on qr.io to get hence it's missing here
-    data,
-    transparent: "on",
-    frontcolor: "#000000",
-    marker_out_color: "#000000",
-    marker_in_color: "#000000",
-    pattern: "default",
-    marker: "default",
-    marker_in: "default",
-    optionlogo: "none",
-  };
-  const requestOptions = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  };
+// QR code using QR Server API
+const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(data)}&size=300x300`;
+const fileName = `${type}_${data}_${file_extension}`
 
-  fetch(qrCodeUrl, requestOptions)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error("Failed to generate QR code");
-      }
-      return response.arrayBuffer();
-    })
+// uploading to cloudinary
+    const options = {
+      public_id: fileName,
+      resource_type: "image",
+      overwrite: true
+    };
 
-
-    .then(async(arrayBuffer) => {
-      // Upload QR code to Cloudinary using Node.js SDK
-      const fileName = `${type}_${data.replace(
-        /[^\w\s]/gi,
-        ""
-      )}_${file_extension}`
-
-      const options = {
-        public_id: fileName,
-        resource_type: "image",
-        overwrite: true
-      };
-
-      try {
-        const result = await cloudinary.uploader.upload(Buffer.from(arrayBuffer), options);
-        console.log(result)
-
-        return res.json({
-          url: result.secure_url,
-          file_name: result.public_id,
-        });
-      } catch (error) {
-        throw new Error("Failed to upload QR code to Cloudinary");
-      }
-    })
-
-    // returns url link to client
-    .then((result) => {
-      const cloudinaryUrl = `https://res.cloudinary.com/${config.CLOUD_NAME}/image/upload/${result.public_id}.${file_extension}`;
-      return res.json({ url: cloudinaryUrl, file_name: result.public_id });
-    })
-    .catch((err) => {
-      console.log(err);
-      return res.status(500).json({ message: "Failed to upload QR code" });
-    });
-});
-
-
+  cloudinary.uploader.upload(qrCodeUrl, options)
+  .then(result => {
+    const cloudinaryUrl = `https://res.cloudinary.com/${config.CLOUD_NAME}/image/upload/${result.public_id}.${file_extension}`;
+    return res.json({ url: cloudinaryUrl, file_name: result.public_id });
+  })
+  .catch(error => {
+    console.log(error);
+    throw new Error("Failed to upload QR code to Cloudinary");
+  });
+})
 
 // function to validate URL
 function isValidUrl(url) {
